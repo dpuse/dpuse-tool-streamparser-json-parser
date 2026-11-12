@@ -1,6 +1,6 @@
 {
     "name": "@dpuse/dpuse-tool-streamparser-json-parser",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "private": false,
     "description": "Reads JSON and JSON Lines as a stream, and maps their structure for browsing and choosing tables.",
     "license": "MIT",
