@@ -1,6 +1,6 @@
 {
     "packages": [
-        "@dpuse/dpuse-shared@1.0.213",
+        "@dpuse/dpuse-shared@1.0.214",
         "@streamparser/json@0.0.26",
         "valibot@1.5.0"
     ],

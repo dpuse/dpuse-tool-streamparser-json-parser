@@ -7,7 +7,7 @@
 [![npm version](https://img.shields.io/npm/v/@dpuse/dpuse-tool-streamparser-json-parser?label=npm)](https://www.npmjs.com/package/@dpuse/dpuse-tool-streamparser-json-parser)
 [![CI](https://github.com/dpuse/dpuse-tool-streamparser-json-parser/actions/workflows/ci.yml/badge.svg)](https://github.com/dpuse/dpuse-tool-streamparser-json-parser/actions/workflows/ci.yml)
 
-...
+Reads JSON and JSON Lines as a stream, and maps their structure for browsing and choosing tables.
 
 [Report a Vulnerability](https://github.com/dpuse/dpuse-tool-streamparser-json-parser/security/advisories/new) · [Open an Issue](https://github.com/dpuse/dpuse-tool-streamparser-json-parser/issues)
 
@@ -25,7 +25,7 @@ In addition, DPUse provides [Tools](https://www.dpuse.app) used by the applicati
 
 ## Introduction
 
-...
+Reads JSON and JSON Lines as a stream, with constant memory however large the item. Maps a JSON item's structure, so a list inside it can be chosen as a table, and lists one level of the structure at a time for browsing.
 
 <!-- OPENING_END -->
 
@@ -55,13 +55,105 @@ This repository is managed using the common set of actions provided by [@dpuse/d
 
 <!-- DEPENDENCY_LICENSES_START -->
 
+## Dependency Licenses
+
+License data is updated each time `npm run document` is run, using [license-checker](https://github.com/RSeidelsohn/license-checker-rseidelsohn). The following table lists every package whose code, styles or assets are included in this project's build, as recorded by the build itself. Modules loaded at run time are not included; each documents its own. These dependencies have been checked and confirmed to use MIT, all of which allow commercial use. All are used unmodified, so any licence conditions that apply only to modified versions are not triggered. Developers cloning this repository should independently verify development dependencies.
+
+| Dependency                                                            | Version | License(s) | Document                                                              |
+| :-------------------------------------------------------------------- | :-----: | :--------- | :-------------------------------------------------------------------- |
+| [@dpuse/dpuse-shared](https://github.com/dpuse/dpuse-shared)          | 1.0.214 | MIT        | [LICENSE](licenses/downloads/@dpuse/dpuse-shared@1.0.214-LICENSE.txt) |
+| [@streamparser/json](https://github.com/juanjoDiaz/streamparser-json) | 0.0.26  | MIT        | [LICENSE](licenses/downloads/@streamparser/json@0.0.26-LICENSE.txt)   |
+| [valibot](https://github.com/open-circle/valibot)                     |  1.5.0  | MIT        | [LICENSE](licenses/downloads/valibot@1.5.0-LICENSE.txt)               |
+
+### Dependency Tree
+
+The dependency tree below shows how each package in the table above is reached — direct and transitive — along with its installed version, release date, and update status. A package that does not ship itself, such as one whose parts are bundled separately, is left out and what ships beneath it is shown in its place. Packages flagged ❗ have a newer version available; ⚠️ indicates a package that hasn't been updated in the last 6 months or longer. Neither flag necessarily indicates a problem: we let new releases stabilise before upgrading, and some packages are mature and stable (have limited or no dependencies), so they require no active development.
+
+- **[@dpuse/dpuse-shared](https://github.com/dpuse/dpuse-shared)** 1.0.214 — this month: 2026-11-12
+    - **[valibot](https://github.com/open-circle/valibot)** 1.5.0 — 2 mths ago: 2026-09-09
+- **[@streamparser/json](https://github.com/juanjoDiaz/streamparser-json)** 0.0.26 — 2 mths ago: 2026-08-21
+
 <!-- DEPENDENCY_LICENSES_END -->
 
 <!-- BUNDLE_START -->
 
+## Bundle Analysis
+
+This report is updated with each release, from the bundle the release builds, using [Sonda](https://sonda.dev/), which analyses final source maps to reveal the actual effects of tree-shaking and minification rather than relying on pre-build estimates.
+
+_Note: Sonda's Vite reports currently exclude CSS files, since Vite does not generate source maps for CSS._
+
+| Chunk/Module/File                                                                  | Composition                                                                                    |
+| :--------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------- |
+| **dist/dpuse-tool-streamparser-json-parser.es.js**                                 | 61.3&nbsp;kB&nbsp;·&nbsp;gzip&nbsp;13.8&nbsp;kB&nbsp;·&nbsp;100.0%&nbsp;of&nbsp;the&nbsp;build |
+| &nbsp;&nbsp;&nbsp;&nbsp;@dpuse/dpuse-shared → dist/dpuse-shared.es.js              | `███████░░░░░░░░░░░░░`&nbsp;34.5%&nbsp;·&nbsp;21.2&nbsp;kB                                     |
+| &nbsp;&nbsp;&nbsp;&nbsp;@streamparser/json → dist/mjs/tokenizer.js + 5 more        | `███████░░░░░░░░░░░░░`&nbsp;33.6%&nbsp;·&nbsp;20.6&nbsp;kB                                     |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↳ dist/mjs/tokenizer.js            | `▒▒▒▒░░░░░░░░░░░░░░░░`&nbsp;21.7%&nbsp;·&nbsp;13.3&nbsp;kB                                     |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↳ dist/mjs/utils/utf-8.js          | `▒▒░░░░░░░░░░░░░░░░░░`&nbsp;8.1%&nbsp;·&nbsp;5.0&nbsp;kB                                       |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↳ dist/mjs/utils/bufferedString.js | `▒░░░░░░░░░░░░░░░░░░░`&nbsp;2.6%&nbsp;·&nbsp;1.6&nbsp;kB                                       |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↳ 3 smaller files                  | `░░░░░░░░░░░░░░░░░░░░`&nbsp;1.2%&nbsp;·&nbsp;726&nbsp;B                                        |
+| &nbsp;&nbsp;&nbsp;&nbsp;src → index.ts + 2 more                                    | `████░░░░░░░░░░░░░░░░`&nbsp;21.1%&nbsp;·&nbsp;12.9&nbsp;kB                                     |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↳ index.ts                         | `▒▒░░░░░░░░░░░░░░░░░░`&nbsp;10.7%&nbsp;·&nbsp;6.6&nbsp;kB                                      |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↳ structureWalker.ts               | `▒░░░░░░░░░░░░░░░░░░░`&nbsp;6.8%&nbsp;·&nbsp;4.2&nbsp;kB                                       |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↳ itemRecords.ts                   | `▒░░░░░░░░░░░░░░░░░░░`&nbsp;3.6%&nbsp;·&nbsp;2.2&nbsp;kB                                       |
+| &nbsp;&nbsp;&nbsp;&nbsp;(bundler output, whitespace & JSON)                        | `██░░░░░░░░░░░░░░░░░░`&nbsp;10.7%&nbsp;·&nbsp;6.6&nbsp;kB                                      |
+
+Bars show each row's share of its output file. ↳ rows are part of the row above.
+
+- n more = the row also holds n more files from the same package or folder, each no larger than the one named. A package can appear under several output files, each holding different files, never the same file twice.
+
+(bundler output, whitespace & JSON) = bytes Sonda can't trace to a source file: whitespace (indentation and line breaks), code the bundler generates (region comments, the combined import/export lines, its small runtime helper and wrappers), and imported JSON such as `config.json`, which the bundler doesn't map. The JSON and the generated code are real bytes that ship; the whitespace mostly disappears once compressed.
+
 <!-- BUNDLE_END -->
 
 <!-- QUALITY_SECURITY_START -->
+
+## Quality & Security
+
+This section is updated each time `npm run document` is run. Settings come from the repository's workflow files and GitHub. Test coverage and the Fallow score are measured at the same time.
+
+### Testing
+
+| Check                | Status | What it does                                                                                                                                                                                                                                                                                                                  |
+| :------------------- | :----- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit tests           | ✅ On  | [Vitest](https://vitest.dev) runs the unit tests. Part of the [CI workflow](https://github.com/dpuse/dpuse-tool-streamparser-json-parser/actions/workflows/ci.yml) on every push and pull request to `main`.                                                                                                                  |
+| Property-based tests | ❌ Off | [fast-check](https://fast-check.dev) runs many random inputs per test to find edge cases, alongside the unit tests.                                                                                                                                                                                                           |
+| Test coverage        | ✅ On  | ![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fdpuse%2Fdpuse-tool-streamparser-json-parser%2Fmain%2Fcode-health-reports%2Fvitest%2Fbadge.json) [Vitest's V8 coverage](https://vitest.dev/guide/coverage) measures the share of source lines the unit tests run. The target is 80%. |
+
+### Code Quality
+
+| Check         | Status | What it does                                                                                                                                                                                                                           |
+| :------------ | :----- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Code analysis | ❌ Off | [SonarCloud](https://sonarcloud.io) checks every push for bugs, code smells and vulnerabilities.                                                                                                                                       |
+| Linting       | ✅ On  | [ESLint](https://eslint.org) checks the code for errors and style problems. Part of the [CI workflow](https://github.com/dpuse/dpuse-tool-streamparser-json-parser/actions/workflows/ci.yml) on every push and pull request to `main`. |
+
+### Security Analysis
+
+| Check           | Status | What it does                                                                                                                                                                                                                                                                                                                                                                                                     |
+| :-------------- | :----- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Push protection | ✅ On  | [GitHub push protection](https://docs.github.com/en/code-security/secret-scanning/push-protection-for-repositories-and-organizations) blocks pushes that contain credentials.                                                                                                                                                                                                                                    |
+| Static analysis | ✅ On  | [![CodeQL](https://github.com/dpuse/dpuse-tool-streamparser-json-parser/actions/workflows/codeql.yml/badge.svg)](https://github.com/dpuse/dpuse-tool-streamparser-json-parser/security/code-scanning) [CodeQL](https://codeql.github.com) scans GitHub Actions and JavaScript/TypeScript for security vulnerabilities, using the extended security queries, on every push and pull request to `main` and weekly. |
+| Secret scanning | ✅ On  | [GitHub secret scanning](https://docs.github.com/en/code-security/secret-scanning) detects credentials, such as API keys and tokens, committed to the repository.                                                                                                                                                                                                                                                |
+
+### Dependencies
+
+| Check               | Status | What it does                                                                                                                                                                                                                                                                                                                               |
+| :------------------ | :----- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Vulnerability audit | ✅ On  | [npm audit](https://docs.npmjs.com/cli/commands/npm-audit) fails when a shipped dependency has any known vulnerability, or a development dependency has a high or critical one. Part of the [CI workflow](https://github.com/dpuse/dpuse-tool-streamparser-json-parser/actions/workflows/ci.yml) on every push and pull request to `main`. |
+| Supply chain risk   | ✅ On  | [Socket](https://socket.dev) flags malicious packages, typosquatting and suspicious behaviour that may not yet have a CVE.                                                                                                                                                                                                                 |
+| Security alerts     | ✅ On  | [Dependabot](https://docs.github.com/en/code-security/dependabot) alerts when a dependency has a known vulnerability, using the GitHub Advisory Database.                                                                                                                                                                                  |
+| Security updates    | ❌ Off | [Dependabot](https://docs.github.com/en/code-security/dependabot) opens pull requests that update vulnerable dependencies. These are handled manually.                                                                                                                                                                                     |
+| Version updates     | ❌ Off | [Dependabot](https://docs.github.com/en/code-security/dependabot) opens pull requests for new dependency versions. These are handled manually.                                                                                                                                                                                             |
+
+### OpenSSF 🚧
+
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/dpuse/dpuse-tool-streamparser-json-parser/badge)](https://scorecard.dev/viewer/?uri=github.com/dpuse/dpuse-tool-streamparser-json-parser)
+
+This project is working towards the [OpenSSF Best Practices](https://www.bestpractices.dev) Passing badge, a self-certification covering security policy, vulnerability reporting, build processes, code quality, and more. Currently the [OpenSSF Scorecard](https://scorecard.dev) provides an independent automated assessment of the project's security practices and is an ongoing area of improvement.
+
+### Reporting Vulnerabilities
+
+Please do not open public GitHub issues for security vulnerabilities. Use [GitHub private vulnerability reporting](https://github.com/dpuse/dpuse-tool-streamparser-json-parser/security/advisories/new) instead. See [SECURITY.md](./SECURITY.md) for the full disclosure policy, contact details, and expected response times.
 
 <!-- QUALITY_SECURITY_END -->
 
