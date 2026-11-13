@@ -1,6 +1,6 @@
 // ── DPUse Framework
+import { resolveDecoderId } from '@dpuse/dpuse-shared';
 import type { BuildStructureIndexOptions, DataFormatId, ListStructureEntriesOptions, ListStructureEntriesResult, ParsedRecord } from '@dpuse/dpuse-shared';
-import { ignoreErrors, resolveDecoderId } from '@dpuse/dpuse-shared';
 import type { ParsedRecordsChunk, ParseStreamOptions, ParseStreamSummary, ParseTextOptions, ParseTextResult, SampleIssue } from '@dpuse/dpuse-shared';
 import type { StructuredParserInterface, StructureEntry, StructureIndex, StructureLocator, StructureNode, StructurePath } from '@dpuse/dpuse-shared';
 
@@ -64,7 +64,14 @@ export class Tool implements StructuredParserInterface {
     async buildStructureIndex(stream: ReadableStream<Uint8Array>, options: BuildStructureIndexOptions): Promise<StructureIndex> {
         if (!isUtf8(options.encodingId)) {
             await stream.cancel();
-            return { byteCount: 0, isComplete: false, issues: [constructIssue('JSON_ENCODING', ENCODING_MESSAGE, undefined)], nodes: [], suggestedStructurePath: undefined, tableCandidateCount: 0 };
+            return {
+                byteCount: 0,
+                isComplete: false,
+                issues: [constructIssue('JSON_ENCODING', ENCODING_MESSAGE, undefined)],
+                nodes: [],
+                suggestedStructurePath: undefined,
+                tableCandidateCount: 0
+            };
         }
         const maxDepth = options.maxDepth ?? DEFAULT_MAX_DEPTH;
         const drafts = new Map<OpenContainer, NodeDraft>();
@@ -229,7 +236,7 @@ export class Tool implements StructuredParserInterface {
         const tracker = createPositionTracker(true);
         const reader = stream.getReader();
         const cancelRead = (): void => {
-            ignoreErrors(() => void reader.cancel(options.abortSignal.reason));
+            void cancelReader(reader, options.abortSignal.reason);
         };
         options.abortSignal.addEventListener('abort', cancelRead, { once: true });
 
@@ -264,7 +271,7 @@ export class Tool implements StructuredParserInterface {
             };
         } finally {
             options.abortSignal.removeEventListener('abort', cancelRead);
-            ignoreErrors(() => void reader.cancel()); // Releases the item when reading stops before the end. A stream already read through ignores it.
+            void cancelReader(reader); // Releases the item when reading stops before the end. A stream already read through ignores it.
         }
     }
 
@@ -308,7 +315,7 @@ async function readStream(
     abortSignal.throwIfAborted();
     const reader = stream.getReader();
     const cancelRead = (): void => {
-        ignoreErrors(() => void reader.cancel(abortSignal.reason));
+        void cancelReader(reader, abortSignal.reason);
     };
     abortSignal.addEventListener('abort', cancelRead, { once: true });
     try {
@@ -332,7 +339,17 @@ async function readStream(
         throw error;
     } finally {
         abortSignal.removeEventListener('abort', cancelRead);
-        ignoreErrors(() => void reader.cancel());
+        void cancelReader(reader);
+    }
+}
+
+// Cancels a read without waiting for it. Cancelling a stream that has already failed rejects with its failure, which the
+// read itself has already thrown, so the rejection is dropped rather than left unhandled.
+async function cancelReader(reader: ReadableStreamDefaultReader<Uint8Array>, reason?: unknown): Promise<void> {
+    try {
+        await reader.cancel(reason);
+    } catch {
+        // The read has already thrown this failure.
     }
 }
 

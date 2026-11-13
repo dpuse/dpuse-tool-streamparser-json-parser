@@ -187,6 +187,37 @@ describe('Tool', () => {
             for (const entry of result.entries) expect(readRange(bytes, entry.locator)).toEqual(readPath(whole, ['orders', 0, entry.key]));
         });
 
+        // A connection can drop part way. The caller is told, and nothing is left unhandled, which the browser would log
+        // as an uncaught error.
+        it('fails with the stream’s own error when the stream fails part way, leaving nothing unhandled', async () => {
+            const failure = new TypeError('network error');
+            const unhandledRejection = vi.fn();
+            process.on('unhandledRejection', unhandledRejection);
+            const stream = new ReadableStream<Uint8Array>({
+                start: (controller) => {
+                    controller.enqueue(encode('{"orders":[{"id":1},'));
+                },
+                pull: (controller) => {
+                    controller.error(failure);
+                }
+            });
+
+            await expect(
+                new Tool().listStructureEntries(stream, {
+                    abortSignal: new AbortController().signal,
+                    dataFormatId: 'json',
+                    entryCount: 100,
+                    locator: { endOffset: undefined, startOffset: 0, state: undefined },
+                    maxValueLength: undefined,
+                    path: []
+                })
+            ).rejects.toBe(failure);
+            await new Promise((resolve) => setTimeout(resolve, 0)); // Lets an unhandled rejection be reported.
+            process.off('unhandledRejection', unhandledRejection);
+
+            expect(unhandledRejection).not.toHaveBeenCalled();
+        });
+
         it('lists only the entries asked for, and stops reading once it knows there are more', async () => {
             const bytes = encode(constructOrdersJson());
             const index = await buildIndex(bytes, { maxDepth: 1 });
