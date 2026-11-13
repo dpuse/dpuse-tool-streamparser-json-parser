@@ -61,7 +61,7 @@ License data is updated each time `npm run document` is run, using [license-chec
 
 | Dependency                                                            | Version | License(s) | Document                                                              |
 | :-------------------------------------------------------------------- | :-----: | :--------- | :-------------------------------------------------------------------- |
-| [@dpuse/dpuse-shared](https://github.com/dpuse/dpuse-shared)          | 1.0.214 | MIT        | [LICENSE](licenses/downloads/@dpuse/dpuse-shared@1.0.214-LICENSE.txt) |
+| [@dpuse/dpuse-shared](https://github.com/dpuse/dpuse-shared)          | 1.0.216 | MIT        | [LICENSE](licenses/downloads/@dpuse/dpuse-shared@1.0.216-LICENSE.txt) |
 | [@streamparser/json](https://github.com/juanjoDiaz/streamparser-json) | 0.0.26  | MIT        | [LICENSE](licenses/downloads/@streamparser/json@0.0.26-LICENSE.txt)   |
 | [valibot](https://github.com/open-circle/valibot)                     |  1.5.0  | MIT        | [LICENSE](licenses/downloads/valibot@1.5.0-LICENSE.txt)               |
 
@@ -69,7 +69,7 @@ License data is updated each time `npm run document` is run, using [license-chec
 
 The dependency tree below shows how each package in the table above is reached — direct and transitive — along with its installed version, release date, and update status. A package that does not ship itself, such as one whose parts are bundled separately, is left out and what ships beneath it is shown in its place. Packages flagged ❗ have a newer version available; ⚠️ indicates a package that hasn't been updated in the last 6 months or longer. Neither flag necessarily indicates a problem: we let new releases stabilise before upgrading, and some packages are mature and stable (have limited or no dependencies), so they require no active development.
 
-- **[@dpuse/dpuse-shared](https://github.com/dpuse/dpuse-shared)** 1.0.214 — this month: 2026-11-12
+- **[@dpuse/dpuse-shared](https://github.com/dpuse/dpuse-shared)** 1.0.216 — this month: 2026-11-13
     - **[valibot](https://github.com/open-circle/valibot)** 1.5.0 — 2 mths ago: 2026-09-09
 - **[@streamparser/json](https://github.com/juanjoDiaz/streamparser-json)** 0.0.26 — 2 mths ago: 2026-08-21
 
@@ -83,20 +83,20 @@ This report is updated with each release, from the bundle the release builds, us
 
 _Note: Sonda's Vite reports currently exclude CSS files, since Vite does not generate source maps for CSS._
 
-| Chunk/Module/File                                                                  | Composition                                                                                    |
-| :--------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------- |
-| **dist/dpuse-tool-streamparser-json-parser.es.js**                                 | 61.3&nbsp;kB&nbsp;·&nbsp;gzip&nbsp;13.8&nbsp;kB&nbsp;·&nbsp;100.0%&nbsp;of&nbsp;the&nbsp;build |
-| &nbsp;&nbsp;&nbsp;&nbsp;@dpuse/dpuse-shared → dist/dpuse-shared.es.js              | `███████░░░░░░░░░░░░░`&nbsp;34.5%&nbsp;·&nbsp;21.2&nbsp;kB                                     |
-| &nbsp;&nbsp;&nbsp;&nbsp;@streamparser/json → dist/mjs/tokenizer.js + 5 more        | `███████░░░░░░░░░░░░░`&nbsp;33.6%&nbsp;·&nbsp;20.6&nbsp;kB                                     |
-| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↳ dist/mjs/tokenizer.js            | `▒▒▒▒░░░░░░░░░░░░░░░░`&nbsp;21.7%&nbsp;·&nbsp;13.3&nbsp;kB                                     |
-| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↳ dist/mjs/utils/utf-8.js          | `▒▒░░░░░░░░░░░░░░░░░░`&nbsp;8.1%&nbsp;·&nbsp;5.0&nbsp;kB                                       |
-| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↳ dist/mjs/utils/bufferedString.js | `▒░░░░░░░░░░░░░░░░░░░`&nbsp;2.6%&nbsp;·&nbsp;1.6&nbsp;kB                                       |
-| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↳ 3 smaller files                  | `░░░░░░░░░░░░░░░░░░░░`&nbsp;1.2%&nbsp;·&nbsp;726&nbsp;B                                        |
-| &nbsp;&nbsp;&nbsp;&nbsp;src → index.ts + 2 more                                    | `████░░░░░░░░░░░░░░░░`&nbsp;21.1%&nbsp;·&nbsp;12.9&nbsp;kB                                     |
-| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↳ index.ts                         | `▒▒░░░░░░░░░░░░░░░░░░`&nbsp;10.7%&nbsp;·&nbsp;6.6&nbsp;kB                                      |
-| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↳ structureWalker.ts               | `▒░░░░░░░░░░░░░░░░░░░`&nbsp;6.8%&nbsp;·&nbsp;4.2&nbsp;kB                                       |
-| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↳ itemRecords.ts                   | `▒░░░░░░░░░░░░░░░░░░░`&nbsp;3.6%&nbsp;·&nbsp;2.2&nbsp;kB                                       |
-| &nbsp;&nbsp;&nbsp;&nbsp;(bundler output, whitespace & JSON)                        | `██░░░░░░░░░░░░░░░░░░`&nbsp;10.7%&nbsp;·&nbsp;6.6&nbsp;kB                                      |
+| Chunk/Module/File                                                           | Composition                                                                                    |
+| :-------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------- |
+| **dist/dpuse-tool-streamparser-json-parser.es.js**                          | 67.9&nbsp;kB&nbsp;·&nbsp;gzip&nbsp;15.4&nbsp;kB&nbsp;·&nbsp;100.0%&nbsp;of&nbsp;the&nbsp;build |
+| &nbsp;&nbsp;&nbsp;&nbsp;@dpuse/dpuse-shared → dist/dpuse-shared.es.js       | `███████░░░░░░░░░░░░░`&nbsp;32.9%&nbsp;·&nbsp;22.3&nbsp;kB                                     |
+| &nbsp;&nbsp;&nbsp;&nbsp;@streamparser/json → dist/mjs/tokenizer.js + 5 more | `██████░░░░░░░░░░░░░░`&nbsp;30.4%&nbsp;·&nbsp;20.6&nbsp;kB                                     |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↳ dist/mjs/tokenizer.js     | `▒▒▒▒░░░░░░░░░░░░░░░░`&nbsp;19.6%&nbsp;·&nbsp;13.3&nbsp;kB                                     |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↳ dist/mjs/utils/utf-8.js   | `▒░░░░░░░░░░░░░░░░░░░`&nbsp;7.3%&nbsp;·&nbsp;5.0&nbsp;kB                                       |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↳ 4 smaller files           | `▒░░░░░░░░░░░░░░░░░░░`&nbsp;3.4%&nbsp;·&nbsp;2.3&nbsp;kB                                       |
+| &nbsp;&nbsp;&nbsp;&nbsp;src → index.ts + 3 more                             | `█████░░░░░░░░░░░░░░░`&nbsp;26.1%&nbsp;·&nbsp;17.7&nbsp;kB                                     |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↳ index.ts                  | `▒▒▒░░░░░░░░░░░░░░░░░`&nbsp;14.2%&nbsp;·&nbsp;9.7&nbsp;kB                                      |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↳ structureWalker.ts        | `▒░░░░░░░░░░░░░░░░░░░`&nbsp;7.1%&nbsp;·&nbsp;4.8&nbsp;kB                                       |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↳ itemRecords.ts            | `▒░░░░░░░░░░░░░░░░░░░`&nbsp;3.3%&nbsp;·&nbsp;2.2&nbsp;kB                                       |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↳ textPosition.ts           | `░░░░░░░░░░░░░░░░░░░░`&nbsp;1.5%&nbsp;·&nbsp;1.0&nbsp;kB                                       |
+| &nbsp;&nbsp;&nbsp;&nbsp;(bundler output, whitespace & JSON)                 | `██░░░░░░░░░░░░░░░░░░`&nbsp;10.6%&nbsp;·&nbsp;7.2&nbsp;kB                                      |
 
 Bars show each row's share of its output file. ↳ rows are part of the row above.
 

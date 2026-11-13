@@ -1,5 +1,5 @@
 // ── External Dependencies & Registrations
-import { Tokenizer, TokenType } from '@streamparser/json';
+import { Tokenizer, TokenizerError, TokenType } from '@streamparser/json';
 
 // ── DPUse Framework
 import type { StructureContainerKindId, StructureKindId, StructurePath } from '@dpuse/dpuse-shared';
@@ -10,16 +10,23 @@ import type { StructureContainerKindId, StructureKindId, StructurePath } from '@
 // and closes, each key and each other value. Index building, browsing and reading rows all share it, so they agree on
 // what the structure is.
 export interface StructureWalker {
-    end: () => void; // Ends the stream. Fails if the JSON is cut off.
-    write: (input: Uint8Array) => void; // Fails if the JSON is not valid.
+    byteCount: () => number; // Bytes written so far.
+    end: () => void; // Ends the stream. Fails with a 'StructureError' if the JSON is cut off.
+    write: (input: Uint8Array) => void; // Fails with a 'StructureError' if the JSON is not valid.
 }
 
 export interface StructureWalkerOptions {
     baseOffset: number; // Where the stream starts in the item, so offsets count from the start of the item.
-    firstItemIndex: number; // The index of the first item, when the stream starts inside a list.
     isJsonLines: boolean;
-    isStartInsideList: boolean; // Whether the stream starts at an item inside a list, at a checkpoint, rather than at a value.
-    rootPath: StructurePath; // The path of the value the stream starts at, or of the list it starts inside.
+    rootPath: StructurePath; // The path of the value the stream starts at, or of the list or object it starts inside.
+    startInside: StartInside | undefined; // Set when the stream starts part way through a list or object, rather than at a value.
+}
+
+// Where in a list or object a stream starts, for reading a later page or from a checkpoint. The stream starts at the
+// entry, after the comma before it.
+export interface StartInside {
+    firstIndex: number; // The entries before it, so list items keep their indexes.
+    kindId: StructureContainerKindId;
 }
 
 export interface StructureWalkerHandlers {
@@ -33,7 +40,7 @@ export interface StructureWalkerHandlers {
 export interface OpenContainer {
     childCount: number;
     depth: number; // 0 for the value the stream starts at.
-    isVirtual: boolean; // Whether the container is the list a stream starts inside, or the lines of JSON Lines, which have no brackets of their own.
+    isVirtual: boolean; // Whether the container is one the stream starts inside, or the lines of JSON Lines, which have no opening bracket in the stream.
     key: EntryKey; // Its key in its parent.
     kindId: StructureContainerKindId;
     parent: OpenContainer | undefined;
@@ -65,12 +72,16 @@ export interface NumberText {
 export type JsonScalar = boolean | NumberText | string | null;
 export type JsonValue = JsonScalar | JsonValue[] | { [key: string]: JsonValue };
 
+// A syntax error, with the byte in the item where it was found, so the caller can say which line and column it is on.
+export interface StructureError extends Error {
+    offset: number;
+}
+
 // What a walker knows while it reads.
 interface WalkerState {
+    byteCount: number;
     byteOffset: number; // Bytes skipped before the tokenizer, such as a byte order mark, so token offsets still count from the stream's start.
-    byteCount: number; // Bytes written, so a stream cut short can say where it ends.
     current: OpenContainer | undefined;
-    isFirstWrite: boolean;
     isRootClosed: boolean;
     isStarted: boolean;
 }
@@ -132,21 +143,14 @@ export function createStructureWalker(options: StructureWalkerOptions, handlers:
     const tokenizer = new Tokenizer(options.isJsonLines ? { separator: '\n' } : undefined);
     // The tokenizer turns numbers into JavaScript numbers through this method, so replacing it keeps them as written.
     Object.assign(tokenizer, { parseNumber: (numberText: string): NumberText => ({ numberText }) });
-    const state: WalkerState = { byteCount: 0, byteOffset: 0, current: undefined, isFirstWrite: true, isRootClosed: false, isStarted: false };
+    const state: WalkerState = { byteCount: 0, byteOffset: 0, current: undefined, isRootClosed: false, isStarted: false };
 
-    // The lines of JSON Lines, or the list the stream starts inside, have no opening bracket in the stream.
-    if (options.isJsonLines || options.isStartInsideList) {
-        const container = constructContainer({
-            depth: 0,
-            isVirtual: true,
-            key: undefined,
-            kindId: 'list',
-            parent: undefined,
-            path: options.rootPath,
-            startOffset: options.baseOffset
-        });
-        container.childCount = options.firstItemIndex;
-        container.positionId = !options.isJsonLines && options.firstItemIndex > 0 ? 'afterComma' : 'start';
+    // The lines of JSON Lines, or a list or object the stream starts inside, have no opening bracket in the stream.
+    const startInside = options.startInside ?? (options.isJsonLines ? { firstIndex: 0, kindId: 'list' as const } : undefined);
+    if (startInside != null) {
+        const container = constructContainer({ depth: 0, isVirtual: true, key: undefined, kindId: startInside.kindId, parent: undefined, path: options.rootPath, startOffset: options.baseOffset });
+        container.childCount = startInside.firstIndex;
+        container.positionId = !options.isJsonLines && startInside.firstIndex > 0 ? 'afterComma' : 'start';
         state.current = container;
         handlers.onContainerStart?.(container);
     }
@@ -160,30 +164,38 @@ export function createStructureWalker(options: StructureWalkerOptions, handlers:
     };
 
     return {
+        byteCount: () => state.byteCount,
         end: (): void => {
-            tokenizer.end();
-            if (!options.isJsonLines && !state.isStarted) failAt('The JSON is empty', options.baseOffset);
+            const endOffset = options.baseOffset + state.byteCount;
+            runTokenizer(() => {
+                tokenizer.end();
+            }, options.baseOffset + state.byteOffset);
+            if (!options.isJsonLines && !state.isStarted) throw constructStructureError('The JSON is empty', options.baseOffset);
             const isOpen = state.current != null && !(options.isJsonLines && state.current.isVirtual);
-            if (isOpen) failAt('The JSON ends before it is complete', options.baseOffset + state.byteCount);
-            if (state.current != null) handlers.onContainerEnd?.(state.current, NaN); // Only the lines of JSON Lines are still open. The caller knows where they end.
+            if (isOpen) throw constructStructureError('The JSON ends before it is complete', endOffset);
+            if (state.current != null) handlers.onContainerEnd?.(state.current, endOffset); // Only the lines of JSON Lines are still open, and they end with the stream.
         },
         write: (input: Uint8Array): void => {
             let bytes = input;
+            const isFirstWrite = state.byteCount === 0;
             state.byteCount += input.length;
-            if (state.isFirstWrite) {
-                state.isFirstWrite = false;
-                if (options.baseOffset === 0 && BYTE_ORDER_MARK.every((byte, index) => bytes[index] === byte)) {
-                    bytes = bytes.subarray(BYTE_ORDER_MARK.length);
-                    state.byteOffset = BYTE_ORDER_MARK.length;
-                }
+            if (isFirstWrite && options.baseOffset === 0 && BYTE_ORDER_MARK.every((byte, index) => bytes[index] === byte)) {
+                bytes = bytes.subarray(BYTE_ORDER_MARK.length);
+                state.byteOffset = BYTE_ORDER_MARK.length;
             }
-            tokenizer.write(bytes);
+            runTokenizer(() => {
+                tokenizer.write(bytes);
+            }, options.baseOffset + state.byteOffset);
         }
     };
 }
 
 export function isNumberText(value: unknown): value is NumberText {
     return typeof value === 'object' && value != null && 'numberText' in value;
+}
+
+export function isStructureError(error: unknown): error is StructureError {
+    return error instanceof Error && 'offset' in error && typeof error.offset === 'number';
 }
 
 // JSON text for a value, writing numbers as they were written in the item.
@@ -202,28 +214,42 @@ function constructContainer(input: Omit<OpenContainer, 'childCount' | 'pendingKe
     return { ...input, childCount: 0, pendingKey: undefined, positionId: 'start' };
 }
 
-function failAt(message: string, offset: number): never {
-    throw new Error(`${message} at byte ${String(offset)}.`);
+function constructStructureError(message: string, offset: number): StructureError {
+    return Object.assign(new Error(`${message}.`), { offset });
+}
+
+// The tokenizer reports a character it cannot read with its position in the bytes it was given, in its own wording. It
+// is turned into the walker's own error, so every syntax error says where it is the same way. Any other error, such as a
+// handler stopping the read on purpose, passes through unchanged.
+function runTokenizer(run: () => void, tokenizerBaseOffset: number): void {
+    try {
+        run();
+    } catch (error) {
+        if (!(error instanceof TokenizerError)) throw error;
+        const match = /^Unexpected "(.*)" at chunk position "\d+" \(absolute position "(\d+)"\)/su.exec(error.message);
+        if (match?.[2] == null) throw constructStructureError('The JSON ends before it is complete', tokenizerBaseOffset);
+        throw constructStructureError(`Unexpected '${match[1] ?? ''}'`, tokenizerBaseOffset + Number(match[2]));
+    }
 }
 
 // Takes the place of a new value in the current container, and returns its key there.
 function startValue(state: WalkerState, options: StructureWalkerOptions, offset: number): { key: EntryKey } {
     const container = state.current;
     if (container == null) {
-        if (state.isRootClosed) failAt('Unexpected content after the end of the JSON', offset);
+        if (state.isRootClosed) throw constructStructureError('Unexpected content after the end of the JSON', offset);
         return { key: undefined };
     }
     if (container.kindId === 'object') {
-        if (container.positionId === 'afterKey') failAt("Expected ':'", offset);
-        else if (container.positionId === 'afterValue') failAt("Expected ',' or '}'", offset);
-        else if (container.positionId !== 'afterColon') failAt('Expected a key', offset);
+        if (container.positionId === 'afterKey') throw constructStructureError("Expected ':'", offset);
+        if (container.positionId === 'afterValue') throw constructStructureError("Expected ',' or '}'", offset);
+        if (container.positionId !== 'afterColon') throw constructStructureError('Expected a key', offset);
         container.positionId = 'afterValue';
         container.childCount++;
         return { key: container.pendingKey };
     }
     // Lines of JSON Lines follow each other with no comma between them.
     const isCommaNeeded = !(container.isVirtual && options.isJsonLines);
-    if (isCommaNeeded && container.positionId === 'afterValue') failAt("Expected ','", offset);
+    if (isCommaNeeded && container.positionId === 'afterValue') throw constructStructureError("Expected ','", offset);
     container.positionId = 'afterValue';
     return { key: container.childCount++ };
 }
@@ -236,25 +262,25 @@ function openContainer({ handlers, options, state }: Walk, kindId: StructureCont
     handlers.onContainerStart?.(state.current);
 }
 
+// A container the stream starts inside closes with a bracket from the item it was cut from, which is not part of it.
 function closeContainer({ handlers, state }: Walk, kindId: StructureContainerKindId, offset: number): void {
     const container = state.current;
     const bracket = kindId === 'object' ? '}' : ']';
-    if (container?.kindId !== kindId) return failAt(`Unexpected '${bracket}'`, offset);
-    if (container.positionId !== 'start' && container.positionId !== 'afterValue') return failAt(`Unexpected '${bracket}'`, offset);
-    // A list the stream starts inside closes with a bracket from the item the stream was cut from.
-    handlers.onContainerEnd?.(container, container.isVirtual ? offset : offset + 1);
+    if (container?.kindId !== kindId) throw constructStructureError(`Unexpected '${bracket}'`, offset);
+    if (container.positionId !== 'start' && container.positionId !== 'afterValue') throw constructStructureError(`Unexpected '${bracket}'`, offset);
+    handlers.onContainerEnd?.(container, offset + 1);
     state.current = container.isVirtual ? undefined : container.parent;
     if (state.current == null) state.isRootClosed = true;
 }
 
 function takeColon(state: WalkerState, offset: number): void {
     if (state.current?.positionId === 'afterKey') state.current.positionId = 'afterColon';
-    else failAt("Unexpected ':'", offset);
+    else throw constructStructureError("Unexpected ':'", offset);
 }
 
 function takeComma(state: WalkerState, offset: number): void {
     if (state.current?.positionId === 'afterValue') state.current.positionId = 'afterComma';
-    else failAt("Unexpected ','", offset);
+    else throw constructStructureError("Unexpected ','", offset);
 }
 
 // A string where an object expects a key is the key.

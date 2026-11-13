@@ -33,7 +33,8 @@ const SCALAR_COLUMN_NAME = 'value'; // The one column of a list whose items are 
 
 // ── Actions ──────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-export function createItemReader(targetPath: StructurePath, onItem: (item: JsonValue) => void): ItemReader {
+// 'onItem' receives each item with the byte after it, so a reader can stop between items.
+export function createItemReader(targetPath: StructurePath, onItem: (item: JsonValue, endOffset: number) => void): ItemReader {
     const frames: ValueFrame[] = [];
     let targetContainer: OpenContainer | undefined;
     let isTargetFound = false;
@@ -47,7 +48,7 @@ export function createItemReader(targetPath: StructurePath, onItem: (item: JsonV
     };
 
     const handlers: StructureWalkerHandlers = {
-        onContainerEnd: (container) => {
+        onContainerEnd: (container, endOffset) => {
             if (container === targetContainer) {
                 isTargetClosed = true;
                 targetContainer = undefined;
@@ -56,7 +57,7 @@ export function createItemReader(targetPath: StructurePath, onItem: (item: JsonV
             if (frame?.container !== container) return;
             frames.pop();
             const parentFrame = frames.at(-1);
-            if (parentFrame == null) onItem(frame.value);
+            if (parentFrame == null) onItem(frame.value, endOffset);
             else addValue(parentFrame.container, container.key, frame.value);
         },
         onContainerStart: (container) => {
@@ -81,7 +82,7 @@ export function createItemReader(targetPath: StructurePath, onItem: (item: JsonV
                 isTargetFound = true;
                 isTargetClosed = true;
             }
-            if (isListItem || isTarget) onItem(scalar.value);
+            if (isListItem || isTarget) onItem(scalar.value, scalar.startOffset);
         }
     };
     return { handlers, isTargetClosed: () => isTargetClosed, isTargetFound: () => isTargetFound };

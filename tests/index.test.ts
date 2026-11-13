@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 // ── DPUse Framework
 import type { BuildStructureIndexOptions, ListStructureEntriesOptions, ParsedRecord, ParsedRecordsChunk, ParseStreamOptions } from '@dpuse/dpuse-shared';
-import type { ParseStreamSummary, ParseTextOptions, StructureIndex, StructurePath } from '@dpuse/dpuse-shared';
+import type { ParseStreamSummary, ParseTextOptions, StructureIndex, StructureLocator, StructurePath } from '@dpuse/dpuse-shared';
 
 // ── Local Framework
 import { Tool } from '@/index';
@@ -43,7 +43,8 @@ describe('Tool', () => {
                 ['orders', 0, 'address'],
                 ['values']
             ]);
-            for (const node of index.nodes) expect(readRange(bytes, node)).toEqual(readPath(whole, node.path));
+            for (const node of index.nodes) expect(readRange(bytes, node.locator)).toEqual(readPath(whole, node.path));
+            expect(index).toMatchObject({ isComplete: true, issues: [] });
         });
 
         it('counts children and lists keys, with a list taking the keys of its object items', async () => {
@@ -82,9 +83,10 @@ describe('Tool', () => {
 
             const checkpoints = findNode(index, ['orders'])?.checkpoints ?? [];
             expect(checkpoints.map((checkpoint) => checkpoint.itemIndex)).toEqual([0, 1000, 2000]);
-            for (const { itemIndex, offset } of checkpoints) {
-                const text = decode(bytes.subarray(offset, offset + 20));
+            for (const { itemIndex, locator } of checkpoints) {
+                const text = decode(bytes.subarray(locator.startOffset, locator.startOffset + 20));
                 expect(text.startsWith(`{"id":${String(itemIndex)},`)).toBe(true);
+                expect(locator.endOffset).toBe(findNode(index, ['orders'])?.locator.endOffset);
             }
         });
 
@@ -94,7 +96,8 @@ describe('Tool', () => {
             const index = await buildIndex(encode(text), { dataFormatId: 'jsonl', maxDepth: 10 });
 
             expect(index.nodes.map((node) => node.path)).toEqual([[], [0]]);
-            expect(findNode(index, [])).toMatchObject({ childCount: 3, endOffset: encode(text).length, isTableCandidate: false, keys: ['a', 'b'], startOffset: 0 });
+            expect(findNode(index, [])).toMatchObject({ childCount: 3, isTableCandidate: false, keys: ['a', 'b'], locator: { endOffset: encode(text).length, startOffset: 0 } });
+            expect(index.suggestedStructurePath).toEqual([]);
         });
 
         it('counts offsets from the start of the item when it begins with a byte order mark', async () => {
@@ -103,7 +106,7 @@ describe('Tool', () => {
             const index = await buildIndex(bytes, {});
 
             const node = findNode(index, ['a']);
-            expect(node == null ? undefined : readRange(bytes, node)).toEqual([1, 2]);
+            expect(node == null ? undefined : readRange(bytes, node.locator)).toEqual([1, 2]);
         });
 
         it('reports progress as bytes are read', async () => {
@@ -115,13 +118,45 @@ describe('Tool', () => {
         });
 
         it.each([
-            ['a closing bracket that does not match', '{"a":[1}', "Unexpected '}' at byte 7."],
-            ['a missing comma', '[1 2]', "Expected ',' at byte 3."],
-            ['content after the end', '{"a":1} 2', 'Unexpected content after the end of the JSON at byte 8.'],
-            ['JSON cut short', '{"a":[1', 'The JSON ends before it is complete at byte 7.'],
-            ['an empty item', '', 'The JSON is empty at byte 0.']
-        ])('fails on %s', async (_label, text, message) => {
-            await expect(buildIndex(encode(text), {})).rejects.toThrow(message);
+            ['a closing bracket that does not match', '{"a":[1}', "Unexpected '}' on line 1, column 8.", '{"a":[1}'],
+            ['a missing comma', '[1 2]', "Expected ',' on line 1, column 4.", '[1 2]'],
+            ['content after the end', '{"a":1} 2', 'Unexpected content after the end of the JSON on line 1, column 9.', '{"a":1} 2'],
+            ['JSON cut short', '{"a":[1', 'The JSON ends before it is complete on line 1, column 8.', '{"a":[1'],
+            ['an empty item', '', 'The JSON is empty on line 1, column 1.', ''],
+            ['a character the tokenizer cannot read', '[1,\n x]', "Unexpected 'x' on line 2, column 2.", ' x]']
+        ])('reports %s with its line, column and the text around it, keeping what was read before it', async (_label, text, message, excerpt) => {
+            const index = await buildIndex(encode(text), {});
+
+            expect(index.isComplete).toBe(false);
+            expect(index.issues).toEqual([expect.objectContaining({ id: 'JSON_INVALID', message, severityId: 'error', value: excerpt })]);
+        });
+
+        // A preview stops part way, so lists and objects still open there are kept with what was read of them.
+        it('maps the start of an item without an error, marking what it did not see the end of', async () => {
+            const index = await buildIndex(encode('{"rows":[{"a":1},{"a":2},{"a'), { isComplete: false });
+
+            expect(index).toMatchObject({ isComplete: false, issues: [], suggestedStructurePath: ['rows'], tableCandidateCount: 1 });
+            expect(findNode(index, ['rows'])).toMatchObject({ childCount: 3, isComplete: false, isTableCandidate: true, locator: { endOffset: undefined } });
+            expect(findNode(index, ['rows', 0])).toMatchObject({ isComplete: true });
+        });
+
+        it.each([
+            ['a list of objects at the top', '[{"a":1}]', [], 1],
+            ['the only list of objects', '{"meta":{"b":2},"rows":[{"a":1,"items":[{"c":3}]}]}', ['rows'], 1],
+            ['nothing when several lists read as rows', '{"orders":[{"a":1}],"customers":[{"b":2}]}', undefined, 2],
+            ['nothing when no list reads as rows', '{"values":[1,2]}', undefined, 0]
+        ] as const)('suggests %s as the table', async (_label, text, suggestedStructurePath, tableCandidateCount) => {
+            const index = await buildIndex(encode(text), { maxDepth: 10 });
+
+            expect(index.suggestedStructurePath).toEqual(suggestedStructurePath);
+            expect(index.tableCandidateCount).toBe(tableCandidateCount);
+        });
+
+        it('does not read an item in an encoding other than UTF-8', async () => {
+            const index = await buildIndex(encode('[]'), { encodingId: 'utf-16le' });
+
+            expect(index).toMatchObject({ isComplete: false, nodes: [], suggestedStructurePath: undefined });
+            expect(index.issues).toEqual([expect.objectContaining({ id: 'JSON_ENCODING', message: 'JSON must be encoded as UTF-8.' })]);
         });
 
         it('stops when the signal is aborted', async () => {
@@ -138,9 +173,9 @@ describe('Tool', () => {
             const index = await buildIndex(bytes, { maxDepth: 10 });
             const order = findNode(index, ['orders', 0]);
 
-            const result = await listEntries(bytes, { path: ['orders', 0], startOffset: order?.startOffset ?? 0 });
+            const result = await listEntries(bytes, { locator: order?.locator, path: ['orders', 0] });
 
-            expect(result.isMore).toBe(false);
+            expect(result).toMatchObject({ issues: [], nextLocator: undefined });
             expect(result.entries.map(({ childCount, key, kindId, value }) => ({ childCount, key, kindId, value }))).toEqual([
                 { childCount: undefined, key: 'id', kindId: 'number', value: '12345678901234567890' },
                 { childCount: undefined, key: 'customer', kindId: 'string', value: 'Kunde 😀' },
@@ -149,7 +184,7 @@ describe('Tool', () => {
                 { childCount: 1, key: 'address', kindId: 'object', value: undefined }
             ]);
             const whole = JSON.parse(NESTED_JSON) as unknown;
-            for (const entry of result.entries) expect(readRange(bytes, entry)).toEqual(readPath(whole, ['orders', 0, entry.key]));
+            for (const entry of result.entries) expect(readRange(bytes, entry.locator)).toEqual(readPath(whole, ['orders', 0, entry.key]));
         });
 
         it('lists only the entries asked for, and stops reading once it knows there are more', async () => {
@@ -158,16 +193,32 @@ describe('Tool', () => {
             const orders = findNode(index, ['orders']);
             let pulledByteCount = 0;
 
-            const result = await listEntries(
-                bytes,
-                { entryCount: 5, path: ['orders'], startOffset: orders?.startOffset ?? 0 },
-                1024,
-                (byteCount) => (pulledByteCount += byteCount)
-            );
+            const result = await listEntries(bytes, { entryCount: 5, locator: orders?.locator, path: ['orders'] }, 1024, (byteCount) => (pulledByteCount += byteCount));
 
             expect(result.entries.map((entry) => entry.key)).toEqual([0, 1, 2, 3, 4]);
-            expect(result.isMore).toBe(true);
+            expect(result.nextLocator).toBeDefined();
             expect(pulledByteCount).toBeLessThan(bytes.length / 10);
+        });
+
+        it('reads the next page from where the last one ended, in a list and in an object', async () => {
+            const bytes = encode('{"list":[10,11,12,13,14],"object":{"a":1,"b":2,"c":3}}');
+            const index = await buildIndex(bytes, {});
+
+            const listPages = await listAllPages(bytes, ['list'], findNode(index, ['list'])?.locator);
+            const objectPages = await listAllPages(bytes, ['object'], findNode(index, ['object'])?.locator);
+
+            expect(listPages.map((page) => page.map(({ key, value }) => [key, value]))).toEqual([
+                [
+                    [0, '10'],
+                    [1, '11']
+                ],
+                [
+                    [2, '12'],
+                    [3, '13']
+                ],
+                [[4, '14']]
+            ]);
+            expect(objectPages.map((page) => page.map(({ key }) => key))).toEqual([['a', 'b'], ['c']]);
         });
 
         it('lists a later page of a list from a checkpoint, numbering its items from there', async () => {
@@ -175,11 +226,11 @@ describe('Tool', () => {
             const index = await buildIndex(bytes, { maxDepth: 1 });
             const checkpoint = findNode(index, ['orders'])?.checkpoints.at(-1);
 
-            const result = await listEntries(bytes, { entryCount: 3, firstItemIndex: checkpoint?.itemIndex, path: ['orders'], startOffset: checkpoint?.offset ?? 0 });
+            const result = await listEntries(bytes, { entryCount: 3, locator: checkpoint?.locator, path: ['orders'] });
 
             expect(result.entries.map((entry) => entry.key)).toEqual([2000, 2001, 2002]);
             const [firstEntry] = result.entries;
-            expect(firstEntry == null ? undefined : readRange(bytes, firstEntry)).toMatchObject({ id: 2000 });
+            expect(firstEntry == null ? undefined : readRange(bytes, firstEntry.locator)).toMatchObject({ id: 2000 });
         });
 
         it('reaches the end of a list from a checkpoint near its end', async () => {
@@ -187,10 +238,10 @@ describe('Tool', () => {
             const index = await buildIndex(bytes, { maxDepth: 1 });
             const checkpoint = findNode(index, ['orders'])?.checkpoints.at(-1);
 
-            const result = await listEntries(bytes, { entryCount: 1000, firstItemIndex: checkpoint?.itemIndex, path: ['orders'], startOffset: checkpoint?.offset ?? 0 });
+            const result = await listEntries(bytes, { entryCount: 1000, locator: checkpoint?.locator, path: ['orders'] });
 
             expect(result.entries).toHaveLength(ORDER_COUNT - 2000);
-            expect(result.isMore).toBe(false);
+            expect(result.nextLocator).toBeUndefined();
         });
 
         it('cuts long text short and says so', async () => {
@@ -207,15 +258,22 @@ describe('Tool', () => {
             const bytes = encode(text);
 
             const lines = await listEntries(bytes, { dataFormatId: 'jsonl', path: [] });
-            const inner = await listEntries(bytes, { dataFormatId: 'jsonl', path: [1], startOffset: text.indexOf('{"b"') });
+            const inner = await listEntries(bytes, { dataFormatId: 'jsonl', locator: { endOffset: undefined, startOffset: text.indexOf('{"b"'), state: undefined }, path: [1] });
 
             expect(lines.entries.map(({ childCount, key, kindId, value }) => ({ childCount, key, kindId, value }))).toEqual([
                 { childCount: 1, key: 0, kindId: 'object', value: undefined },
                 { childCount: 1, key: 1, kindId: 'object', value: undefined },
                 { childCount: undefined, key: 2, kindId: 'number', value: '7' }
             ]);
-            expect(lines.entries[2]?.endOffset).toBe(bytes.length);
+            expect(lines.entries[2]?.locator.endOffset).toBe(bytes.length);
             expect(inner.entries.map((entry) => entry.key)).toEqual(['b']);
+        });
+
+        it('keeps the entries read before a syntax error and reports it', async () => {
+            const result = await listEntries(encode('[1,2,}'), { path: [] });
+
+            expect(result.entries.map((entry) => entry.key)).toEqual([0, 1]);
+            expect(result.issues).toEqual([expect.objectContaining({ id: 'JSON_INVALID', lineNumber: 1, message: "Unexpected '}' on line 1, column 6." })]);
         });
     });
 
@@ -230,7 +288,7 @@ describe('Tool', () => {
                 ['2', 'Ada', '1E+400', '[]', 'Basel', null]
             ]);
             expect(records[1]?.map((field) => field.valueWasQuoted)).toEqual([false, true, false, true, true, false]);
-            expect(summary).toMatchObject({ nonUniformRecordCount: 0, recordCount: 3 });
+            expect(summary).toMatchObject({ isComplete: true, nonUniformRecordCount: 0, recordCount: 3 });
         });
 
         it('reads the whole item when no path is given', async () => {
@@ -276,20 +334,40 @@ describe('Tool', () => {
             expect(pulledByteCount).toBeLessThan(bytes.length / 10);
         });
 
-        it('decodes an item in another encoding', async () => {
+        it('stops between items once the byte limit is passed, and says it did not finish', async () => {
+            const text = '[{"a":1},{"a":2},{"a":3}]';
+
+            const { chunks, summary } = await readParse(encode(text), { byteLimit: text.indexOf('{"a":2}') + 1 });
+
+            expect(readValues(chunks.flatMap((chunk) => chunk.records))).toEqual([['a'], ['1'], ['2']]);
+            expect(summary).toMatchObject({ isComplete: false, recordCount: 3 });
+        });
+
+        it('stops at the end of the next item when the stop signal fires', async () => {
+            const controller = new AbortController();
+            controller.abort();
+
+            const { summary } = await readParse(encode('[{"a":1},{"a":2}]'), { stopSignal: controller.signal });
+
+            expect(summary).toMatchObject({ isComplete: false, recordCount: 2 });
+        });
+
+        it('does not read an item in an encoding other than UTF-8', async () => {
             const bytes = new Uint8Array(Buffer.from('[{"a":"é"}]', 'utf16le'));
 
-            const { chunks } = await readParse(bytes, { encodingId: 'utf-16le' });
-
-            expect(readValues(chunks.flatMap((chunk) => chunk.records))).toEqual([['a'], ['é']]);
+            await expect(readParse(bytes, { encodingId: 'utf-16le' })).rejects.toThrow('JSON must be encoded as UTF-8.');
         });
 
         it('fails when nothing is at the path', async () => {
             await expect(readParse(encode(NESTED_JSON), { structurePath: ['missing'] })).rejects.toThrow("Nothing found at 'missing'.");
         });
 
-        it('fails on JSON that is not valid', async () => {
-            await expect(readParse(encode('[{"a":1},]'), {})).rejects.toThrow("Unexpected ']' at byte 9.");
+        it('fails on JSON that is not valid, naming the line and column', async () => {
+            await expect(readParse(encode('[\n{"a":1},]'), {}, 3)).rejects.toThrow("Unexpected ']' on line 2, column 9.");
+        });
+
+        it('fails on a line of JSON Lines that is not valid', async () => {
+            await expect(readParse(encode('{"a":1}\n{"a":}\n'), { dataFormatId: 'jsonl' })).rejects.toThrow("Unexpected '}' on line 2, column 6.");
         });
 
         it('stops when the signal is aborted', async () => {
@@ -305,7 +383,7 @@ describe('Tool', () => {
             const result = await parseText('[{"a":1},{"a":2}]', { isComplete: true });
 
             expect(readValues(result.parsedRecords)).toEqual([['a'], ['1'], ['2']]);
-            expect(result.issues).toEqual([]);
+            expect(result).toMatchObject({ hasHeaders: true, issues: [] });
         });
 
         // A preview is cut wherever its byte limit falls, usually inside an item.
@@ -319,7 +397,30 @@ describe('Tool', () => {
         it('reports JSON that is not valid with the line it is on', async () => {
             const result = await parseText('[\n{"a":1},\n{"a" 2}]', { isComplete: true });
 
-            expect(result.issues).toEqual([expect.objectContaining({ id: 'JSON_INVALID', lineNumber: 3, message: "Expected ':' at byte 16.", severityId: 'error' })]);
+            expect(result.issues).toEqual([
+                expect.objectContaining({
+                    columnNumber: 6,
+                    id: 'JSON_INVALID',
+                    lineNumber: 3,
+                    message: "Expected ':' on line 3, column 6.",
+                    severityId: 'error',
+                    value: '{"a" 2}]'
+                })
+            ]);
+        });
+
+        it('reports a line of JSON Lines that is not valid and reads the lines after it', async () => {
+            const result = await parseText('{"a":1}\n{"a":}\n{"a":3}\n', { dataFormatId: 'jsonl' });
+
+            expect(readValues(result.parsedRecords)).toEqual([['a'], ['1'], ['3']]);
+            expect(result.issues).toEqual([expect.objectContaining({ columnNumber: 6, id: 'JSON_INVALID', lineNumber: 2, recordNumber: 2 })]);
+        });
+
+        it('does not report the last line of JSON Lines cut short', async () => {
+            const result = await parseText('{"a":1}\n{"a":', { dataFormatId: 'jsonl', isComplete: false });
+
+            expect(readValues(result.parsedRecords)).toEqual([['a'], ['1']]);
+            expect(result.issues).toEqual([]);
         });
 
         it('reads the list at the path', async () => {
@@ -368,9 +469,9 @@ function readPath(value: unknown, path: StructurePath): unknown {
     return current;
 }
 
-// The JSON a byte range holds.
-function readRange(bytes: Uint8Array, range: { endOffset: number; startOffset: number }): unknown {
-    return JSON.parse(decode(bytes.subarray(range.startOffset, range.endOffset)));
+// The JSON a locator's byte range holds.
+function readRange(bytes: Uint8Array, locator: StructureLocator): unknown {
+    return JSON.parse(decode(bytes.subarray(locator.startOffset, locator.endOffset)));
 }
 
 function findNode(index: StructureIndex, path: StructurePath): StructureIndex['nodes'][number] | undefined {
@@ -378,13 +479,22 @@ function findNode(index: StructureIndex, path: StructurePath): StructureIndex['n
 }
 
 function buildIndex(bytes: Uint8Array, overrides: Partial<BuildStructureIndexOptions>, chunkSize?: number): Promise<StructureIndex> {
-    const options: BuildStructureIndexOptions = { abortSignal: new AbortController().signal, dataFormatId: 'json', maxDepth: undefined, onProgress: undefined, ...overrides };
+    const options: BuildStructureIndexOptions = {
+        abortSignal: new AbortController().signal,
+        dataFormatId: 'json',
+        encodingId: 'utf-8',
+        isComplete: true,
+        maxDepth: undefined,
+        onProgress: undefined,
+        ...overrides
+    };
     return new Tool().buildStructureIndex(streamOf(bytes, chunkSize), options);
 }
 
+// Lists a page, reading the bytes the locator names as a connector would. A missing locator starts at the top.
 function listEntries(
     bytes: Uint8Array,
-    overrides: Partial<ListStructureEntriesOptions> & { path: StructurePath },
+    overrides: Partial<Omit<ListStructureEntriesOptions, 'locator'>> & { locator?: StructureLocator | undefined; path: StructurePath },
     chunkSize?: number,
     onPull?: (byteCount: number) => void
 ): ReturnType<Tool['listStructureEntries']> {
@@ -392,12 +502,28 @@ function listEntries(
         abortSignal: new AbortController().signal,
         dataFormatId: 'json',
         entryCount: 100,
-        firstItemIndex: undefined,
         maxValueLength: undefined,
-        startOffset: 0,
-        ...overrides
+        ...overrides,
+        locator: overrides.locator ?? { endOffset: undefined, startOffset: 0, state: undefined }
     };
-    return new Tool().listStructureEntries(streamOf(bytes, chunkSize, options.startOffset, onPull), options);
+    const rangeBytes = bytes.subarray(0, options.locator.endOffset ?? bytes.length);
+    return new Tool().listStructureEntries(streamOf(rangeBytes, chunkSize, options.locator.startOffset, onPull), options);
+}
+
+// Every page of a node, two entries at a time, each read from where the last one said the next starts.
+async function listAllPages(
+    bytes: Uint8Array,
+    path: StructurePath,
+    locator: StructureLocator | undefined
+): Promise<Awaited<ReturnType<Tool['listStructureEntries']>>['entries'][]> {
+    const pages: Awaited<ReturnType<Tool['listStructureEntries']>>['entries'][] = [];
+    let nextLocator = locator;
+    while (nextLocator != null) {
+        const page = await listEntries(bytes, { entryCount: 2, locator: nextLocator, path });
+        pages.push(page.entries);
+        nextLocator = page.nextLocator;
+    }
+    return pages;
 }
 
 // Reads a parse through, keeping each chunk and the summary it ends with.
