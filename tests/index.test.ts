@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 // ── DPUse Framework
-import type { BuildStructureIndexOptions, ListStructureEntriesOptions, ParsedRecord, ParsedRecordsChunk, ParseStreamOptions } from '@dpuse/dpuse-shared';
+import type { BuildStructureIndexOptions, ListStructureEntriesOptions, ParsedRecordsChunk, ParseStreamOptions } from '@dpuse/dpuse-shared';
 import type { ParseStreamSummary, ParseTextOptions, StructureIndex, StructureLocator, StructurePath } from '@dpuse/dpuse-shared';
 
 // ── Local Framework
@@ -313,36 +313,35 @@ describe('Tool', () => {
             const { chunks, summary } = await readParse(encode(NESTED_JSON), { structurePath: ['orders'] });
 
             const records = chunks.flatMap((chunk) => chunk.records);
-            expect(readValues(records)).toEqual([
+            expect(records).toEqual([
                 ['id', 'customer', 'total', 'items', 'address.city', 'note'],
                 ['12345678901234567890', 'Kunde 😀', '-0.5e-3', '[{"sku":"S-é","qty":1}]', 'Zürich', null],
                 ['2', 'Ada', '1E+400', '[]', 'Basel', null]
             ]);
-            expect(records[1]?.map((field) => field.valueWasQuoted)).toEqual([false, true, false, true, true, false]);
             expect(summary).toMatchObject({ isComplete: true, nonUniformRecordCount: 0, recordCount: 3 });
         });
 
         it('reads the whole item when no path is given', async () => {
             const { chunks } = await readParse(encode('[{"a":1},{"a":2}]'), {});
 
-            expect(readValues(chunks.flatMap((chunk) => chunk.records))).toEqual([['a'], ['1'], ['2']]);
+            expect(chunks.flatMap((chunk) => chunk.records)).toEqual([['a'], ['1'], ['2']]);
         });
 
         it('reads an object at the path as a single row, and a list of plain values as one column', async () => {
             const objectRows = await readParse(encode(NESTED_JSON), { structurePath: ['meta'] });
             const valueRows = await readParse(encode(NESTED_JSON), { structurePath: ['values'] });
 
-            expect(readValues(objectRows.chunks.flatMap((chunk) => chunk.records))).toEqual([
+            expect(objectRows.chunks.flatMap((chunk) => chunk.records)).toEqual([
                 ['title', 'empty', 'none', 'flags'],
                 ['Ünïcødé 名前 😀 "q" \\ \n é', '{}', '[]', '[true,false,null]']
             ]);
-            expect(readValues(valueRows.chunks.flatMap((chunk) => chunk.records))).toEqual([['value'], ['1'], ['two'], ['[3]']]);
+            expect(valueRows.chunks.flatMap((chunk) => chunk.records)).toEqual([['value'], ['1'], ['two'], ['[3]']]);
         });
 
         it('fixes the columns from the first chunk, and counts a later item with a new field as not uniform', async () => {
             const { chunks, summary } = await readParse(encode('[{"a":1},{"a":2},{"a":3,"b":4},{"b":5}]'), { chunkSize: 2 });
 
-            expect(chunks.map((chunk) => readValues(chunk.records))).toEqual([
+            expect(chunks.map((chunk) => chunk.records)).toEqual([
                 [['a'], ['1'], ['2']],
                 [['3'], [null]]
             ]);
@@ -352,7 +351,7 @@ describe('Tool', () => {
         it('reads the lines of JSON Lines as rows', async () => {
             const { chunks } = await readParse(encode('{"a":1}\n{"a":2}\n'), { dataFormatId: 'jsonl' });
 
-            expect(readValues(chunks.flatMap((chunk) => chunk.records))).toEqual([['a'], ['1'], ['2']]);
+            expect(chunks.flatMap((chunk) => chunk.records)).toEqual([['a'], ['1'], ['2']]);
         });
 
         it('stops reading once the list at the path has been read', async () => {
@@ -370,7 +369,7 @@ describe('Tool', () => {
 
             const { chunks, summary } = await readParse(encode(text), { byteLimit: text.indexOf('{"a":2}') + 1 });
 
-            expect(readValues(chunks.flatMap((chunk) => chunk.records))).toEqual([['a'], ['1'], ['2']]);
+            expect(chunks.flatMap((chunk) => chunk.records)).toEqual([['a'], ['1'], ['2']]);
             expect(summary).toMatchObject({ isComplete: false, recordCount: 3 });
         });
 
@@ -413,7 +412,7 @@ describe('Tool', () => {
         it('reads complete text with no issues', async () => {
             const result = await parseText('[{"a":1},{"a":2}]', { isComplete: true });
 
-            expect(readValues(result.parsedRecords)).toEqual([['a'], ['1'], ['2']]);
+            expect(result.parsedRecords).toEqual([['a'], ['1'], ['2']]);
             expect(result).toMatchObject({ hasHeaders: true, issues: [] });
         });
 
@@ -421,7 +420,7 @@ describe('Tool', () => {
         it('keeps the items before the cut in text cut short, without an issue', async () => {
             const result = await parseText('[{"a":1},{"a":2},{"a":', { isComplete: false });
 
-            expect(readValues(result.parsedRecords)).toEqual([['a'], ['1'], ['2']]);
+            expect(result.parsedRecords).toEqual([['a'], ['1'], ['2']]);
             expect(result.issues).toEqual([]);
         });
 
@@ -443,21 +442,21 @@ describe('Tool', () => {
         it('reports a line of JSON Lines that is not valid and reads the lines after it', async () => {
             const result = await parseText('{"a":1}\n{"a":}\n{"a":3}\n', { dataFormatId: 'jsonl' });
 
-            expect(readValues(result.parsedRecords)).toEqual([['a'], ['1'], ['3']]);
+            expect(result.parsedRecords).toEqual([['a'], ['1'], ['3']]);
             expect(result.issues).toEqual([expect.objectContaining({ columnNumber: 6, id: 'JSON_INVALID', lineNumber: 2, recordNumber: 2 })]);
         });
 
         it('does not report the last line of JSON Lines cut short', async () => {
             const result = await parseText('{"a":1}\n{"a":', { dataFormatId: 'jsonl', isComplete: false });
 
-            expect(readValues(result.parsedRecords)).toEqual([['a'], ['1']]);
+            expect(result.parsedRecords).toEqual([['a'], ['1']]);
             expect(result.issues).toEqual([]);
         });
 
         it('reads the list at the path', async () => {
             const result = await parseText(NESTED_JSON, { isComplete: true, structurePath: ['values'] });
 
-            expect(readValues(result.parsedRecords)).toEqual([['value'], ['1'], ['two'], ['[3]']]);
+            expect(result.parsedRecords).toEqual([['value'], ['1'], ['two'], ['[3]']]);
         });
     });
 });
@@ -584,8 +583,4 @@ async function readParse(
 
 function parseText(text: string, overrides: Partial<ParseTextOptions>): ReturnType<Tool['parseText']> {
     return new Tool().parseText(text, { dataFormatId: 'json', isComplete: true, valueDelimiterIds: [], ...overrides });
-}
-
-function readValues(records: ParsedRecord[]): (string | null)[][] {
-    return records.map((record) => record.map((field) => field.value));
 }

@@ -117,13 +117,13 @@ export function constructTableShape(itemFields: Map<string, JsonValue>[]): Table
 }
 
 export function constructHeaderRecord(shape: TableShape): ParsedRecord {
-    return shape.columnNames.map((name) => ({ value: name, valueWasQuoted: true }));
+    return [...shape.columnNames];
 }
 
 // A row in the table's column order. A field the item lacks is null. A field the table has no column for is dropped, and
 // reported so the caller can count the item as not uniform.
 export function constructRecord(fields: Map<string, JsonValue>, shape: TableShape): { hasUnknownField: boolean; record: ParsedRecord } {
-    const record: ParsedRecord = shape.columnNames.map(() => ({ value: null, valueWasQuoted: false }));
+    const record: ParsedRecord = shape.columnNames.map(() => null);
     let hasUnknownField = false;
     for (const [name, value] of fields) {
         const columnIndex = shape.columnIndexes.get(name);
@@ -148,11 +148,12 @@ function isPlainObject(value: JsonValue): value is Record<string, JsonValue> {
     return typeof value === 'object' && value != null && !Array.isArray(value) && !isNumberText(value);
 }
 
-// Text is marked as quoted, as in delimited text, so type inference keeps a string of digits as text.
+// A JSON null is no value, as nothing written is in delimited text. A number keeps the text it was written as, and an
+// object or array is written out as JSON.
 function constructParsedValue(value: JsonValue): ParsedRecord[number] {
-    if (value == null) return { value: null, valueWasQuoted: false };
-    if (typeof value === 'string') return { value, valueWasQuoted: true };
-    if (typeof value === 'boolean') return { value: String(value), valueWasQuoted: false };
-    if (isNumberText(value)) return { value: value.numberText, valueWasQuoted: false };
-    return { value: stringifyJsonValue(value), valueWasQuoted: true };
+    if (value == null) return null;
+    if (typeof value === 'string') return value;
+    if (typeof value === 'boolean') return String(value);
+    if (isNumberText(value)) return value.numberText;
+    return stringifyJsonValue(value);
 }
