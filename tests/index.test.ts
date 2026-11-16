@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 // ── DPUse Framework
 import type { BuildStructureIndexOptions, ListStructureEntriesOptions, ParsedRecordsChunk, ParseStreamOptions } from '@dpuse/dpuse-shared';
-import type { ParseStreamSummary, ParseTextOptions, StructureIndex, StructureLocator, StructurePath } from '@dpuse/dpuse-shared';
+import type { ParsePreviewOptions, ParseStreamSummary, StructureIndex, StructureLocator, StructurePath } from '@dpuse/dpuse-shared';
 
 // ── Local Framework
 import { Tool } from '@/index';
@@ -408,9 +408,16 @@ describe('Tool', () => {
         });
     });
 
-    describe('parseText', () => {
+    describe('parsePreview', () => {
+        it('reads only UTF-8, as parseStream does, and says so for any other encoding', async () => {
+            const result = await parsePreview('[{"a":1}]', { encodingId: 'windows-1252' });
+
+            expect(result.parsedRecords).toEqual([]);
+            expect(result.issues).toEqual([expect.objectContaining({ id: 'JSON_ENCODING', message: 'JSON must be encoded as UTF-8.' })]);
+        });
+
         it('reads complete text with no issues', async () => {
-            const result = await parseText('[{"a":1},{"a":2}]', { isComplete: true });
+            const result = await parsePreview('[{"a":1},{"a":2}]', { isComplete: true });
 
             expect(result.parsedRecords).toEqual([['a'], ['1'], ['2']]);
             expect(result).toMatchObject({ hasHeaders: true, issues: [] });
@@ -418,14 +425,14 @@ describe('Tool', () => {
 
         // A preview is cut wherever its byte limit falls, usually inside an item.
         it('keeps the items before the cut in text cut short, without an issue', async () => {
-            const result = await parseText('[{"a":1},{"a":2},{"a":', { isComplete: false });
+            const result = await parsePreview('[{"a":1},{"a":2},{"a":', { isComplete: false });
 
             expect(result.parsedRecords).toEqual([['a'], ['1'], ['2']]);
             expect(result.issues).toEqual([]);
         });
 
         it('reports JSON that is not valid with the line it is on', async () => {
-            const result = await parseText('[\n{"a":1},\n{"a" 2}]', { isComplete: true });
+            const result = await parsePreview('[\n{"a":1},\n{"a" 2}]', { isComplete: true });
 
             expect(result.issues).toEqual([
                 expect.objectContaining({
@@ -440,21 +447,21 @@ describe('Tool', () => {
         });
 
         it('reports a line of JSON Lines that is not valid and reads the lines after it', async () => {
-            const result = await parseText('{"a":1}\n{"a":}\n{"a":3}\n', { dataFormatId: 'jsonl' });
+            const result = await parsePreview('{"a":1}\n{"a":}\n{"a":3}\n', { dataFormatId: 'jsonl' });
 
             expect(result.parsedRecords).toEqual([['a'], ['1'], ['3']]);
             expect(result.issues).toEqual([expect.objectContaining({ columnNumber: 6, id: 'JSON_INVALID', lineNumber: 2, recordNumber: 2 })]);
         });
 
         it('does not report the last line of JSON Lines cut short', async () => {
-            const result = await parseText('{"a":1}\n{"a":', { dataFormatId: 'jsonl', isComplete: false });
+            const result = await parsePreview('{"a":1}\n{"a":', { dataFormatId: 'jsonl', isComplete: false });
 
             expect(result.parsedRecords).toEqual([['a'], ['1']]);
             expect(result.issues).toEqual([]);
         });
 
         it('reads the list at the path', async () => {
-            const result = await parseText(NESTED_JSON, { isComplete: true, structurePath: ['values'] });
+            const result = await parsePreview(NESTED_JSON, { isComplete: true, structurePath: ['values'] });
 
             expect(result.parsedRecords).toEqual([['value'], ['1'], ['two'], ['[3]']]);
         });
@@ -581,6 +588,7 @@ async function readParse(
     return { chunks, summary: result.value };
 }
 
-function parseText(text: string, overrides: Partial<ParseTextOptions>): ReturnType<Tool['parseText']> {
-    return new Tool().parseText(text, { dataFormatId: 'json', isComplete: true, valueDelimiterIds: [], ...overrides });
+// The preview's text as the bytes the parser is given, in UTF-8 unless a test says otherwise.
+function parsePreview(text: string, overrides: Partial<ParsePreviewOptions>): ReturnType<Tool['parsePreview']> {
+    return new Tool().parsePreview(new TextEncoder().encode(text), { dataFormatId: 'json', encodingId: 'utf-8', isComplete: true, valueDelimiterIds: [], ...overrides });
 }

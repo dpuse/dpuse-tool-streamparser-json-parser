@@ -1,5 +1,5 @@
 {
-  "version": "1.0.5",
+  "version": "1.0.6",
   "name": "@dpuse/dpuse-tool-streamparser-json-parser",
   "dependencies": {
     "@dpuse/dpuse-development": {
@@ -8,7 +8,7 @@
       "overridden": false,
       "dependencies": {
         "@dpuse/dpuse-shared": {
-          "version": "1.0.229"
+          "version": "1.0.231"
         },
         "license-checker-rseidelsohn": {
           "version": "5.0.1",
@@ -1206,8 +1206,8 @@
       }
     },
     "@dpuse/dpuse-shared": {
-      "version": "1.0.229",
-      "resolved": "https://registry.npmjs.org/@dpuse/dpuse-shared/-/dpuse-shared-1.0.229.tgz",
+      "version": "1.0.231",
+      "resolved": "https://registry.npmjs.org/@dpuse/dpuse-shared/-/dpuse-shared-1.0.231.tgz",
       "overridden": false,
       "dependencies": {
         "file-type": {

@@ -1,12 +1,12 @@
 // ── DPUse Framework
 import { resolveDecoderId } from '@dpuse/dpuse-shared';
 import type { BuildStructureIndexOptions, DataFormatId, ListStructureEntriesOptions, ListStructureEntriesResult, ParsedRecord } from '@dpuse/dpuse-shared';
-import type { ParsedRecordsChunk, ParseStreamOptions, ParseStreamSummary, ParseTextOptions, ParseTextResult, SampleIssue } from '@dpuse/dpuse-shared';
+import type { ParsedRecordsChunk, ParsePreviewOptions, ParsePreviewResult, ParseStreamOptions, ParseStreamSummary, SampleIssue } from '@dpuse/dpuse-shared';
 import type { StructuredParserInterface, StructureEntry, StructureIndex, StructureLocator, StructureNode, StructurePath } from '@dpuse/dpuse-shared';
 
 // ── Local Framework
 import { constructHeaderRecord, constructRecord, constructTableShape, createItemReader, flattenItem, type TableShape } from '@/itemRecords';
-import { countLineFeeds, createPositionTracker, type PositionTracker } from '@/textPosition';
+import { countLineFeeds, createPositionTracker, LINE_FEED_BYTE, type PositionTracker } from '@/textPosition';
 import { createStructureWalker, isNumberText, isStructureError, type JsonValue, type OpenContainer, type StartInside } from '@/structureWalker';
 import type { StructureError, StructureWalker, StructureWalkerHandlers, StructureWalkerOptions } from '@/structureWalker';
 
@@ -45,6 +45,11 @@ const INDEXED_ITEM_COUNT = 1; // A list's items indexed as nodes of their own.
 const MAX_KEY_COUNT = 200; // The most keys a node lists, so an object used as a map with millions of keys stays small in the index.
 
 const ENCODING_MESSAGE = 'JSON must be encoded as UTF-8.';
+
+const CARRIAGE_RETURN_BYTE = 0x0d;
+const SPACE_BYTE = 0x20;
+const TAB_BYTE = 0x09;
+const BLANK_LINE_BYTES = new Set([CARRIAGE_RETURN_BYTE, SPACE_BYTE, TAB_BYTE]);
 
 // WebKit hands over a file stream in pieces of about 18 MB, against about 2 MB in Chromium. Each piece is read in slices
 // of this size, so rows are handed over and the abort checked often. A slice is a view, not a copy.
@@ -276,13 +281,18 @@ export class Tool implements StructuredParserInterface {
     }
 
     /**
-     * Parse text. Reads a preview the same way as 'parseStream'. A preview cut short ends in the middle of the JSON, so
-     * only an error in what was read is an issue, and the items read before the cut are kept. In JSON Lines each line is
-     * read on its own, so a line that cannot be read is an issue and the lines after it are still read.
+     * Parse preview. Reads the preview's bytes the same way as 'parseStream', so only UTF-8 is read. A preview cut short
+     * ends in the middle of the JSON, so only an error in what was read is an issue, and the items read before the cut
+     * are kept. In JSON Lines each line is read on its own, so a line that cannot be read is an issue and the lines after
+     * it are still read.
      */
-    parseText(text: string, options: ParseTextOptions): Promise<ParseTextResult> {
+    parsePreview(bytes: Uint8Array, options: ParsePreviewOptions): Promise<ParsePreviewResult> {
+        if (!isUtf8(options.encodingId)) {
+            const issues = [constructIssue('JSON_ENCODING', ENCODING_MESSAGE, undefined)];
+            return Promise.resolve({ hasHeaders: undefined, issues, parsedRecords: [], recordDelimiterId: '\n', valueDelimiterId: undefined });
+        }
         const items: Map<string, JsonValue>[] = [];
-        const issues = options.dataFormatId === 'jsonl' ? parseLines(text, options.isComplete, items) : parseDocument(text, options, items);
+        const issues = options.dataFormatId === 'jsonl' ? parseLines(bytes, options.isComplete, items) : parseDocument(bytes, options, items);
         const shape = constructTableShape(items);
         const parsedRecords: ParsedRecord[] = items.length === 0 ? [] : [constructHeaderRecord(shape), ...items.map((fields) => constructRecord(fields, shape).record)];
         const hasHeaders = items.length === 0 ? undefined : true; // Column names are taken from keys, so the first record is always a header.
@@ -372,16 +382,15 @@ function runWalker(run: () => void, tracker: PositionTracker): void {
     }
 }
 
-//#region: Text helpers.
+//#region: Preview helpers.
 
 // Reads a whole JSON document, or the start of one, into items, and returns the issues found.
-function parseDocument(text: string, options: ParseTextOptions, items: Map<string, JsonValue>[]): SampleIssue[] {
+function parseDocument(bytes: Uint8Array, options: ParsePreviewOptions, items: Map<string, JsonValue>[]): SampleIssue[] {
     const itemReader = createItemReader(options.structurePath ?? [], (item) => {
         items.push(flattenItem(item));
     });
     const walker = createStructureWalker(constructWalkerOptions('json'), itemReader.handlers);
     const tracker = createPositionTracker(true);
-    const bytes = new TextEncoder().encode(text);
     tracker.take(bytes, 0);
     try {
         walker.write(bytes);
@@ -396,28 +405,44 @@ function parseDocument(text: string, options: ParseTextOptions, items: Map<strin
 
 // Reads each line of JSON Lines on its own, so one that cannot be read is an issue and the rest are still read. The last
 // line of a preview cut short is where the cut fell, so it is not an issue.
-function parseLines(text: string, isComplete: boolean, items: Map<string, JsonValue>[]): SampleIssue[] {
+function parseLines(bytes: Uint8Array, isComplete: boolean, items: Map<string, JsonValue>[]): SampleIssue[] {
     const issues: SampleIssue[] = [];
-    const lines = text.split('\n');
+    const lines = splitLines(bytes);
     for (const [lineIndex, line] of lines.entries()) {
-        if (line.trim() === '') continue;
+        if (isBlankLine(line)) continue;
         const lineItems: JsonValue[] = [];
         const itemReader = createItemReader([], (item) => {
             lineItems.push(item);
         });
         const walker = createStructureWalker(constructWalkerOptions('json'), itemReader.handlers);
-        const bytes = new TextEncoder().encode(line);
         try {
-            walker.write(bytes);
+            walker.write(line);
             walker.end();
             for (const item of lineItems) items.push(flattenItem(item));
         } catch (error) {
             if (!isStructureError(error)) throw error;
             const isCutOff = !isComplete && lineIndex === lines.length - 1;
-            if (!isCutOff) issues.push(constructLineIssue(error, bytes, lineIndex + 1));
+            if (!isCutOff) issues.push(constructLineIssue(error, line, lineIndex + 1));
         }
     }
     return issues;
+}
+
+// The bytes of each line, split at each line feed. A line feed is one byte in UTF-8 and never part of another character.
+function splitLines(bytes: Uint8Array): Uint8Array[] {
+    const lines: Uint8Array[] = [];
+    let lineStart = 0;
+    for (let index = bytes.indexOf(LINE_FEED_BYTE); index !== -1; index = bytes.indexOf(LINE_FEED_BYTE, lineStart)) {
+        lines.push(bytes.subarray(lineStart, index));
+        lineStart = index + 1;
+    }
+    lines.push(bytes.subarray(lineStart));
+    return lines;
+}
+
+// Only JSON whitespace: spaces, tabs and the carriage return of a Windows line ending.
+function isBlankLine(line: Uint8Array): boolean {
+    return line.every((byte) => BLANK_LINE_BYTES.has(byte));
 }
 
 //#region: Row helpers.

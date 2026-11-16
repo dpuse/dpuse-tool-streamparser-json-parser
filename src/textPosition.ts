@@ -15,7 +15,7 @@ export interface TextPosition {
 
 // ── Constants ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-const LINE_FEED_BYTE = 0x0a;
+export const LINE_FEED_BYTE = 0x0a;
 const MAX_LINE_START_BYTE_COUNT = 4096; // The most of a line kept from earlier chunks. A longer line has no column.
 const EXCERPT_BEFORE_LENGTH = 40;
 const EXCERPT_AFTER_BYTE_COUNT = 20;
