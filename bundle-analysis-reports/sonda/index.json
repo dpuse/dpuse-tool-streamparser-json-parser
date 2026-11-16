@@ -1,7 +1,7 @@
 {
   "metadata": {
     "version": "0.14.0",
-    "generatedAt": "2026-11-13T13:53:49.996Z",
+    "generatedAt": "2026-11-16T13:28:20.285Z",
     "integration": "vite",
     "sources": false,
     "gzip": true,
@@ -21,8 +21,8 @@
       "name": "[unassigned]",
       "type": "other",
       "format": "other",
-      "uncompressed": 7342,
-      "gzip": 334,
+      "uncompressed": 7308,
+      "gzip": 333,
       "brotli": 0,
       "parent": "dist/dpuse-tool-streamparser-json-parser.es.js"
     },
@@ -30,8 +30,8 @@
       "kind": "asset",
       "name": "dist/dpuse-tool-streamparser-json-parser.es.js",
       "type": "script",
-      "uncompressed": 69449,
-      "gzip": 15757,
+      "uncompressed": 69198,
+      "gzip": 15707,
       "brotli": 0
     },
     {
@@ -39,15 +39,15 @@
       "name": "node_modules/@dpuse/dpuse-shared/dist/dpuse-shared.es.js",
       "type": "script",
       "format": "esm",
-      "uncompressed": 68419
+      "uncompressed": 71938
     },
     {
       "kind": "chunk",
       "name": "node_modules/@dpuse/dpuse-shared/dist/dpuse-shared.es.js",
       "type": "script",
       "format": "esm",
-      "uncompressed": 22841,
-      "gzip": 4175,
+      "uncompressed": 22854,
+      "gzip": 4173,
       "brotli": 0,
       "parent": "dist/dpuse-tool-streamparser-json-parser.es.js"
     },
@@ -78,7 +78,7 @@
       "type": "script",
       "format": "esm",
       "uncompressed": 13642,
-      "gzip": 3050,
+      "gzip": 3047,
       "brotli": 0,
       "parent": "dist/dpuse-tool-streamparser-json-parser.es.js"
     },
@@ -112,7 +112,7 @@
       "type": "script",
       "format": "esm",
       "uncompressed": 1626,
-      "gzip": 412,
+      "gzip": 411,
       "brotli": 0,
       "parent": "dist/dpuse-tool-streamparser-json-parser.es.js"
     },
@@ -170,7 +170,7 @@
       "type": "script",
       "format": "esm",
       "uncompressed": 5105,
-      "gzip": 1096,
+      "gzip": 1095,
       "brotli": 0,
       "parent": "dist/dpuse-tool-streamparser-json-parser.es.js"
     },
@@ -187,7 +187,7 @@
       "type": "script",
       "format": "esm",
       "uncompressed": 9893,
-      "gzip": 3170,
+      "gzip": 3167,
       "brotli": 0,
       "parent": "dist/dpuse-tool-streamparser-json-parser.es.js"
     },
@@ -196,15 +196,15 @@
       "name": "src/itemRecords.ts",
       "type": "script",
       "format": "esm",
-      "uncompressed": 4237
+      "uncompressed": 3955
     },
     {
       "kind": "chunk",
       "name": "src/itemRecords.ts",
       "type": "script",
       "format": "esm",
-      "uncompressed": 2276,
-      "gzip": 896,
+      "uncompressed": 2046,
+      "gzip": 858,
       "brotli": 0,
       "parent": "dist/dpuse-tool-streamparser-json-parser.es.js"
     },
@@ -221,7 +221,7 @@
       "type": "script",
       "format": "esm",
       "uncompressed": 4930,
-      "gzip": 1683,
+      "gzip": 1681,
       "brotli": 0,
       "parent": "dist/dpuse-tool-streamparser-json-parser.es.js"
     },
